@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>50x50 Pygame Sprite Designer (Optimized)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: none; /* Disable panning and zooming on touch devices */
+        }
+        /* Grid container styling */
+        #grid-container {
+            display: grid;
+            grid-template-columns: repeat(50, 1fr);
+            grid-template-rows: repeat(50, 1fr);
+            border: 2px solid #374151; /* gray-700 */
+            width: 80vmin;
+            height: 80vmin;
+            max-width: 700px;
+            max-height: 700px;
+            cursor: crosshair;
+        }
+        /* Individual pixel styling */
+        .grid-pixel {
+            background-color: #ffffff; /* Initial color: white */
+            /* A subtle border to distinguish pixels */
+            box-shadow: inset 0 0 0 1px #e5e7eb;
+        }
+        /* Custom focus ring for color input */
+        input[type="color"]:focus-visible {
+            outline: 2px solid #4f46e5; /* indigo-600 */
+            outline-offset: 2px;
+        }
+        /* Styling for the code block */
+        pre {
+            background-color: #1f2937; /* gray-800 */
+            color: #d1d5db; /* gray-300 */
+            padding: 1rem;
+            border-radius: 0.5rem;
+            max-height: 60vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-4xl">
+        <!-- Editor View -->
+        <div id="editor-view">
+            <h1 class="text-3xl font-bold text-gray-800 text-center mb-4">Sprite Designer</h1>
+            <p class="text-gray-600 text-center mb-6">Click or drag on the 50x50 grid to draw. The generated code will be optimized.</p>
+
+            <!-- Controls Section -->
+            <div class="flex flex-wrap items-center justify-center gap-4 mb-6 p-4 bg-white rounded-lg shadow-md">
+                <div class="flex items-center gap-2">
+                    <label for="colorPicker" class="text-sm font-medium text-gray-700">Color:</label>
+                    <input type="color" id="colorPicker" value="#3b82f6" class="w-10 h-10 p-1 border-none rounded-md cursor-pointer">
+                </div>
+                <button id="generateBtn" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-75 transition-colors">
+                    Generate Code
+                </button>
+                <button id="clearBtn" class="px-6 py-2 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-75 transition-colors">
+                    Clear Grid
+                </button>
+            </div>
+
+            <!-- Grid -->
+            <div id="grid-container" class="mx-auto shadow-lg"></div>
+        </div>
+
+        <!-- Code View -->
+        <div id="code-view" class="hidden">
+             <h1 class="text-3xl font-bold text-gray-800 text-center mb-4">Generated Pygame Code</h1>
+             <p class="text-gray-600 text-center mb-6">This optimized code is ready to be used in your Pygame sprite class.</p>
+             <div class="relative">
+                <pre><code id="pygame-code"></code></pre>
+                <button id="copyCodeBtn" class="absolute top-2 right-2 px-3 py-1.5 bg-gray-600 text-white text-xs font-semibold rounded-md hover:bg-gray-700">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+             </div>
+             <div class="flex justify-center mt-6">
+                <button id="backToEditorBtn" class="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700">
+                    <i class="fas fa-arrow-left"></i> Back to Editor
+                </button>
+            </div>
+        </div>
+
+        <!-- Message Box for notifications -->
+        <div id="messageBox" class="hidden fixed top-5 right-5 bg-green-500 text-white p-4 rounded-lg shadow-xl transition-opacity duration-300">
+            <p id="messageText"></p>
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // View elements
+            const editorView = document.getElementById('editor-view');
+            const codeView = document.getElementById('code-view');
+
+            // Editor elements
+            const gridContainer = document.getElementById('grid-container');
+            const colorPicker = document.getElementById('colorPicker');
+            const generateBtn = document.getElementById('generateBtn');
+            const clearBtn = document.getElementById('clearBtn');
+            
+            // Code view elements
+            const pygameCodeElement = document.getElementById('pygame-code');
+            const copyCodeBtn = document.getElementById('copyCodeBtn');
+            const backToEditorBtn = document.getElementById('backToEditorBtn');
+
+            // Message box elements
+            const messageBox = document.getElementById('messageBox');
+            const messageText = document.getElementById('messageText');
+
+            const gridSize = 50;
+            const WHITE_RGB = 'rgb(255, 255, 255)';
+            let isDrawing = false;
+
+            // --- Grid Generation ---
+            function createGrid() {
+                gridContainer.innerHTML = ''; // Clear existing grid
+                for (let i = 0; i < gridSize * gridSize; i++) {
+                    const pixel = document.createElement('div');
+                    pixel.classList.add('grid-pixel');
+                    gridContainer.appendChild(pixel);
+                }
+            }
+
+            // --- Drawing Logic ---
+            function colorPixel(event) {
+                let target;
+                if (event.touches && event.touches.length > 0) {
+                    const touch = event.touches[0];
+                    target = document.elementFromPoint(touch.clientX, touch.clientY);
+                } else {
+                    target = event.target;
+                }
+
+                if (target && target.classList.contains('grid-pixel')) {
+                    target.style.backgroundColor = colorPicker.value;
+                }
+            }
+            
+            gridContainer.addEventListener('mousedown', (e) => { isDrawing = true; colorPixel(e); });
+            gridContainer.addEventListener('mousemove', (e) => { if (isDrawing) colorPixel(e); });
+            window.addEventListener('mouseup', () => { isDrawing = false; });
+            gridContainer.addEventListener('touchstart', (e) => { isDrawing = true; colorPixel(e); e.preventDefault(); }, { passive: false });
+            gridContainer.addEventListener('touchmove', (e) => { if (isDrawing) colorPixel(e); e.preventDefault(); }, { passive: false });
+            window.addEventListener('touchend', () => { isDrawing = false; });
+
+            // --- Button Controls ---
+            clearBtn.addEventListener('click', () => {
+                gridContainer.querySelectorAll('.grid-pixel').forEach(pixel => {
+                    pixel.style.backgroundColor = '#ffffff';
+                });
+            });
+
+            // --- Code Generation ---
+            generateBtn.addEventListener('click', () => {
+                const pixels = Array.from(gridContainer.querySelectorAll('.grid-pixel'));
+                const pixelColors = pixels.map(p => p.style.backgroundColor || WHITE_RGB);
+                
+                // 1. Find Bounding Box of the drawing
+                let minX = gridSize, minY = gridSize, maxX = -1, maxY = -1;
+                let hasDrawing = false;
+                for (let i = 0; i < pixelColors.length; i++) {
+                    if (pixelColors[i] !== WHITE_RGB) {
+                        hasDrawing = true;
+                        const x = i % gridSize;
+                        const y = Math.floor(i / gridSize);
+                        minX = Math.min(minX, x);
+                        minY = Math.min(minY, y);
+                        maxX = Math.max(maxX, x);
+                        maxY = Math.max(maxY, y);
+                    }
+                }
+
+                let code = `import pygame\n\n`;
+                code += `# This code can be used within a Pygame sprite class __init__ method.\n`;
+                
+                if (!hasDrawing) {
+                    code += `# No sprite drawn. Creating a 1x1 transparent pixel as a placeholder.\n`;
+                    code += `self.image = pygame.Surface([1, 1], pygame.SRCALPHA)\n`;
+                    code += `self.rect = self.image.get_rect()\n`;
+                } else {
+                    const spriteWidth = maxX - minX + 1;
+                    const spriteHeight = maxY - minY + 1;
+
+                    code += `# Set the surface for the sprite with calculated dimensions\n`;
+                    code += `self.image = pygame.Surface([${spriteWidth}, ${spriteHeight}])\n`;
+                    code += `self.image.fill((255, 255, 255)) # Fill with a default background color\n`;
+                    code += `# To make the background transparent, uncomment the following lines:\n`;
+                    code += `# self.image.set_colorkey((255, 255, 255))\n`;
+                    code += `# self.image = self.image.convert_alpha()\n\n`;
+
+                    // 2. Consolidate Rectangles (Greedy Algorithm)
+                    const visited = Array(gridSize * gridSize).fill(false);
+                    const rects = [];
+
+                    for (let y = minY; y <= maxY; y++) {
+                        for (let x = minX; x <= maxX; x++) {
+                            const index = y * gridSize + x;
+                            if (visited[index] || pixelColors[index] === WHITE_RGB) {
+                                continue;
+                            }
+
+                            const color = pixelColors[index];
+                            let rectWidth = 1;
+                            while (x + rectWidth <= maxX && !visited[y * gridSize + x + rectWidth] && pixelColors[y * gridSize + x + rectWidth] === color) {
+                                rectWidth++;
+                            }
+
+                            let rectHeight = 1;
+                            while (y + rectHeight <= maxY) {
+                                let canExtend = true;
+                                for (let i = 0; i < rectWidth; i++) {
+                                    const nextIndex = (y + rectHeight) * gridSize + x + i;
+                                    if (visited[nextIndex] || pixelColors[nextIndex] !== color) {
+                                        canExtend = false;
+                                        break;
+                                    }
+                                }
+                                if (canExtend) {
+                                    rectHeight++;
+                                } else {
+                                    break;
+                                }
+                            }
+                            
+                            // Add the consolidated rectangle
+                            rects.push({ x, y, width: rectWidth, height: rectHeight, color });
+
+                            // Mark all pixels in this new rectangle as visited
+                            for (let h = 0; h < rectHeight; h++) {
+                                for (let w = 0; w < rectWidth; w++) {
+                                    visited[(y + h) * gridSize + (x + w)] = true;
+                                }
+                            }
+                        }
+                    }
+
+                    // 3. Generate code for the consolidated rectangles
+                    code += `# Draw the consolidated rectangles onto the surface\n`;
+                    rects.forEach(rect => {
+                        const rgbTuple = rect.color.match(/\d+/g).join(', ');
+                        const translatedX = rect.x - minX;
+                        const translatedY = rect.y - minY;
+                        code += `pygame.draw.rect(self.image, (${rgbTuple}), (${translatedX}, ${translatedY}, ${rect.width}, ${rect.height}))\n`;
+                    });
+
+                    code += `\n# Get the rect for positioning the sprite\n`;
+                    code += `self.rect = self.image.get_rect()\n`;
+                }
+
+                pygameCodeElement.textContent = code;
+                editorView.classList.add('hidden');
+                codeView.classList.remove('hidden');
+            });
+
+            // --- Code View Controls ---
+            backToEditorBtn.addEventListener('click', () => {
+                codeView.classList.add('hidden');
+                editorView.classList.remove('hidden');
+            });
+
+            copyCodeBtn.addEventListener('click', () => {
+                const codeToCopy = pygameCodeElement.textContent;
+                const textArea = document.createElement('textarea');
+                textArea.value = codeToCopy;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showNotification('Code copied to clipboard!');
+                } catch (err) {
+                    showNotification('Failed to copy code.', true);
+                }
+                document.body.removeChild(textArea);
+            });
+            
+            function showNotification(message, isError = false) {
+                messageText.textContent = message;
+                messageBox.className = `fixed top-5 right-5 text-white p-4 rounded-lg shadow-xl transition-opacity duration-300 ${isError ? 'bg-red-500' : 'bg-green-500'}`;
+                messageBox.classList.remove('hidden');
+                setTimeout(() => messageBox.classList.add('hidden'), 3000);
+            }
+
+            // --- Initialization ---
+            createGrid();
+        });
+    </script>
+</body>
+</html>
